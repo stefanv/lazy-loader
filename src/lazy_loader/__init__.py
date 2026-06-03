@@ -21,6 +21,36 @@ __all__ = ["attach", "attach_stub", "load"]
 threadlock = threading.Lock()
 
 
+class _ShadowGuardModule(types.ModuleType):
+    """Module type to protect function attributes from being overwritten.
+
+    When a function has the same name as the submodule it resides in
+    (e.g. a ``max_tree`` function defined in ``max_tree.py``),
+    importing that submodule causes the import machinery to call
+    ``setattr(pkg, "max_tree", <submodule>)``.  That updates the
+    package ``__dict__``, preventing ``__getattr__`` from ever
+    resolving the name to the function again.
+
+    This subclass suppresses those dictionary updates (only in the
+    shadowing case).
+
+    We track the set of protected names in the ``__lazy_shadowed__``
+    attr.
+
+    """
+
+    def __setattr__(self, name, value):
+        shadowed = self.__dict__.get("__lazy_shadowed__")
+        if (
+            shadowed is not None
+            and name in shadowed
+            # Is it trying to set this attribute to the system module?
+            and value is sys.modules.get(f"{self.__name__}.{name}")
+        ):
+            return
+        super().__setattr__(name, value)
+
+
 def attach(package_name, submodules=None, submod_attrs=None):
     """Attach lazily loaded submodules, functions, or other attributes.
 
@@ -91,6 +121,26 @@ def attach(package_name, submodules=None, submod_attrs=None):
 
     def __dir__():
         return __all__.copy()
+
+    # When a function attribute has the same name as the submodule it
+    # resides in (e.g. `max_tree` from `max_tree.py`), importing that
+    # submodule makes the import machinery overwrite the parent
+    # package attribute with the module object, shadowing the function
+    # (see _ShadowGuardModule).
+    #
+    # Record affected cases and, only in those cases, swap in the
+    # guarding module type.
+    shadowed = {attr for attr, mod in attr_to_modules.items() if attr == mod}
+    if shadowed:
+        pkg = sys.modules.get(package_name)
+        # Only touch plain package modules (or our own wrapper) --- we
+        # don't want to mess with custom module classes.
+        if type(pkg) in (types.ModuleType, _ShadowGuardModule):
+            pkg.__dict__["__lazy_shadowed__"] = (
+                pkg.__dict__.get("__lazy_shadowed__", set()) | shadowed
+            )
+            if type(pkg) is types.ModuleType:
+                pkg.__class__ = _ShadowGuardModule
 
     eager_import = os.environ.get("EAGER_IMPORT", "") not in ("0", "")
     if eager_import:
