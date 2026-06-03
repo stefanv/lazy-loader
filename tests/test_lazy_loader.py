@@ -178,6 +178,17 @@ def test_attach_same_module_and_attr_name(clean_fake_pkg, eager_import):
         assert isinstance(some_func, types.FunctionType)
 
 
+def test_attach_submodule_does_not_shadow_function(clean_fake_pkg):
+    # Where `some_func` is defined in module `some_func`: When
+    # submodule is imported before the function has been resolved, the
+    # import machinery tries to set the package `__dict__` to point to
+    # the module.  We need to prevent this, otherwise we cannot
+    # access the function.
+    import tests.fake_pkg.some_func  # noqa: F401
+    from tests import fake_pkg
+    assert isinstance(fake_pkg.some_func, types.FunctionType)
+
+
 FAKE_STUB = """
 from . import rank
 from ._gaussian import gaussian
