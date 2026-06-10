@@ -29,7 +29,8 @@ class _ShadowGuardModule(types.ModuleType):
     importing that submodule causes the import machinery to call
     ``setattr(pkg, "max_tree", <submodule>)``.  That updates the
     package ``__dict__``, preventing ``__getattr__`` from ever
-    resolving the name to the function again.
+    resolving the name to the function again. The same problem occurs
+    when ``x`` is defined in ``x/sub.py``.
 
     This subclass suppresses those dictionary updates (only in the
     shadowing case).
@@ -122,15 +123,20 @@ def attach(package_name, submodules=None, submod_attrs=None):
     def __dir__():
         return __all__.copy()
 
-    # When a function attribute has the same name as the submodule it
-    # resides in (e.g. `max_tree` from `max_tree.py`), importing that
-    # submodule makes the import machinery overwrite the parent
-    # package attribute with the module object, shadowing the function
-    # (see _ShadowGuardModule).
+    # When a function has the same name as a module the import
+    # machinery needs to load along the way to accessing it
+    # (e.g. `max_tree` from `max_tree.py`, or `x` from `x/sub.py`), a
+    # side-effect of it loading that module is overwriting the package
+    # attribute (so it points to the module, i.e. to `max_tree` or `x`
+    # the module), shadowing the function (see _ShadowGuardModule).
     #
     # Record affected cases and, only in those cases, swap in the
     # guarding module type.
-    shadowed = {attr for attr, mod in attr_to_modules.items() if attr == mod}
+    shadowed = {
+        attr
+        for attr, mod in attr_to_modules.items()
+        if attr == mod.split(".")[0]
+    }
     if shadowed:
         pkg = sys.modules.get(package_name)
         # Only touch plain package modules (or our own wrapper) --- we
