@@ -186,6 +186,7 @@ def test_attach_submodule_does_not_shadow_function(clean_fake_pkg):
     # access the function.
     import tests.fake_pkg.some_func  # noqa: F401
     from tests import fake_pkg
+
     assert isinstance(fake_pkg.some_func, types.FunctionType)
 
 

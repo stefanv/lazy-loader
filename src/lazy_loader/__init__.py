@@ -133,9 +133,7 @@ def attach(package_name, submodules=None, submod_attrs=None):
     # Record affected cases and, only in those cases, swap in the
     # guarding module type.
     shadowed = {
-        attr
-        for attr, mod in attr_to_modules.items()
-        if attr == mod.split(".")[0]
+        attr for attr, mod in attr_to_modules.items() if attr == mod.split(".")[0]
     }
     if shadowed:
         pkg = sys.modules.get(package_name)
